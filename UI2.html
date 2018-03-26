@@ -1,0 +1,230 @@
+<body>
+	<div id="map"></svg></div>
+	<p><button id="add">+</button></p>
+	<div id="code"></div>
+</body>
+<style>
+.node{
+	width:15px;
+	height:15px;
+}
+.endNode{
+	background-image:url("Node_Yellow.svg");
+	position: absolute;
+	cursor: move;
+	background-size:100%;
+}
+.midNode{
+	background-image:url("Node_Cyan.svg");
+	position: absolute;
+	cursor: move;
+	background-size:100%;
+}
+.unselectable {
+   -moz-user-select: -moz-none;
+   -khtml-user-select: none;
+   -webkit-user-select: none;
+   -ms-user-select: none;
+   user-select: none;
+}
+#map{
+	background-image:url("Map.svg");
+	background-size:100%;
+	width:888px;
+	height:360px;
+}
+#lines{
+	width:100%;
+	height:100%;
+}
+</style>
+<script src="jquery-3.3.1.js"></script>
+<link rel="stylesheet" type="text/css" href="jquery.svg.css"> 
+<script type="text/javascript" src="jquery.svg.js"></script>
+<!--Drag element code copied from w3schools-->
+<script>
+	
+	function dragElement(elmnt) {
+	  var pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+	  elmnt.onmousedown = dragMouseDown;
+
+	  function dragMouseDown(e) {
+		if(elmnt.hasAttribute('node')){
+	      if(elmnt.getAttribute('node')=='end'){
+		    lastClickedEnd=elmnt;
+		  }
+	    }
+		e = e || window.event;
+		// get the mouse cursor position at startup:
+		pos3 = e.clientX;
+		pos4 = e.clientY;
+		document.onmouseup = closeDragElement;
+		// call a function whenever the cursor moves:
+		document.onmousemove = elementDrag;
+	  }
+
+	  function elementDrag(e) {
+		e = e || window.event;
+		// calculate the new cursor position:
+		pos1 = pos3 - e.clientX;
+		pos2 = pos4 - e.clientY;
+		pos3 = e.clientX;
+		pos4 = e.clientY;
+		// set the element's new position:
+		elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+		elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+	  }
+
+	  function closeDragElement() {
+		/* stop moving when mouse button is released:*/
+		document.onmouseup = null;
+		document.onmousemove = null;
+	  }
+	}
+</script>
+<!--Other code-->
+<script>
+	jQuery.fn.redraw = function() {
+		this.css('display', 'none'); 
+		var temp = this[0].offsetHeight;
+		this.css('display', '');
+		temp = this[0].offsetHeight;
+	};
+	var styleChange = new MutationObserver(function(mutations) {
+		mutations.forEach(function(mutationRecord) {
+			svg.clear();
+			var codeGen = "";
+			for(var i in curves){
+				var x1 = parseInt(curves[i][0].style.left,10);
+				var y1 = parseInt(curves[i][0].style.top,10);
+				var x2 = parseInt(curves[i][1].style.left,10);
+				var y2 = parseInt(curves[i][1].style.top,10);
+				var x3 = parseInt(curves[i][2].style.left,10);
+				var y3 = parseInt(curves[i][2].style.top,10);
+				var pt1 = {'x':x1,'y':y1};
+				var pt2 = {'x':x2,'y':y2};
+				var pt3 = {'x':x3,'y':y3};
+				var center = (CalculateCircleCenter(pt1,pt2,pt3));
+				var radius = Math.hypot(x1-center['x'],y1-center['y']);
+				//var arcStart = polarToCartesian(x, y, radius, startAngle);
+				//var ardEnd = polarToCartesian(x, y, radius, endAngle);
+				svg.line(x1, y1, x3, y3, {stroke: 'blue', strokeWidth: 2});
+				svg.circle(center['x'],center['y'],5,{fill: 'red', stroke: 'blue', strokeWidth: 1});
+				//svg.circle(center['x'],center['y'],radius,{fill: 'rgba(0,0,0,0)',stroke: 'blue', strokeWidth: 1});
+				
+				var slope = ((y1-y3)/(x1-x3));
+				var yint = y1-(slope*x1);
+				var clockwise = false;
+				if(((slope*x2)+yint)>y2){
+					clockwise=true;
+				}
+				if(x1>x3){//just don't read this
+					clockwise=!clockwise;
+				}
+				
+				var angle = find_angle(pt1,pt3,center);
+				
+				
+				
+				var path = svg.createPath();
+				svg.path(path.move(x1,y1).arc(radius,radius,angle,false,clockwise,x3,y3).close(),{fill:'rgba(0,0,0,0)',stroke:'blue',strokeWidth:1});
+				
+				var mapWidth = map.getBoundingClientRect()['width'];
+				var mapHeight = map.getBoundingClientRect()['height'];
+				var irl_pt1 = {'x':((x1-map.offsetLeft)/mapWidth)*888,'y':((y1-map.offsetTop)/mapHeight)*360};
+				var irl_pt2 = {'x':((x2-map.offsetLeft)/mapWidth)*888,'y':((y2-map.offsetTop)/mapHeight)*360};
+				var irl_pt3 = {'x':((x3-map.offsetLeft)/mapWidth)*888,'y':((y3-map.offsetTop)/mapHeight)*360};
+				console.log(y1-map.offsetRight);
+				var irl_center = (CalculateCircleCenter(irl_pt1,irl_pt2,irl_pt3));
+				var irl_radius = Math.hypot(irl_pt1['x']-irl_center['x'],irl_pt1['y']-irl_center['y']);
+				var irl_direction = "COUNTERCLOCKWISE";
+				if(clockwise){
+					irl_direction="CLOCKWISE";
+				}
+				
+				codeGen+="autoCmdList.drive.addCurveDegreesSync(Direction.FORWARD,"+angle+",inches("+irl_radius+"), Direction."+irl_pt1+", TRANSITION_SPEED_FULL);<br>"
+			}
+			code.innerHTML = codeGen;
+			
+		});    
+	});
+	function styleListen(target){
+		styleChange.observe(target, { attributes : true, attributeFilter : ['style'] });
+	}
+	
+	//function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+	//  var angleInRadians = angleInDegrees * Math.PI / 180.0;
+	//  var x = centerX + radius * Math.cos(angleInRadians);
+	//  var y = centerY + radius * Math.sin(angleInRadians);
+	//  return [x,y];
+	//}
+	
+	function find_angle(p0,p1,c) {
+		//var p0c = Math.sqrt(Math.pow(c.x-p0.x,2)+
+		//					Math.pow(c.y-p0.y,2)); // p0->c (b)   
+		//var p1c = Math.sqrt(Math.pow(c.x-p1.x,2)+
+		//					Math.pow(c.y-p1.y,2)); // p1->c (a)
+		//var p0p1 = Math.sqrt(Math.pow(p1.x-p0.x,2)+
+		//					 Math.pow(p1.y-p0.y,2)); // p0->p1 (c)
+		//return Math.acos((p1c*p1c+p0c*p0c-p0p1*p0p1)/(2*p1c*p0c));
+		return Math.atan2(p0.y - c.y, p0.x - c.x) - Math.atan2(p1.y - c.y, p1.x - c.x);
+	}
+	
+	function CalculateCircleCenter(A,B,C)
+	{
+		var yDelta_a = B.y - A.y;
+		var xDelta_a = B.x - A.x;
+		var yDelta_b = C.y - B.y;
+		var xDelta_b = C.x - B.x;
+
+		center = [];
+
+		var aSlope = yDelta_a / xDelta_a;
+		var bSlope = yDelta_b / xDelta_b;
+
+		center.x = (aSlope*bSlope*(A.y - C.y) + bSlope*(A.x + B.x) - aSlope*(B.x+C.x) )/(2* (bSlope-aSlope) );
+		center.y = -1*(center.x - (A.x+B.x)/2)/aSlope +  (A.y+B.y)/2;
+		return center;
+	}
+	var lastClickedEnd = null;
+	var map = document.getElementById("map");
+	map.className="unselectable";
+	map.ondragstart = function() { return false; };
+	$('#map').svg();
+	var svg = $('#map').svg('get');
+	var add = document.getElementById("add");
+	add.className="unselectable";
+	var curves = [];
+	add.onclick = function(){
+		//node creation and setup
+		var end2 = document.createElement("div");
+		end2.className ="endNode node";
+		end2.setAttribute("node","end");
+		end2.setAttribute("group",curves.length);
+		dragElement(end2);
+		styleListen(end2);
+		document.body.appendChild(end2);
+		var mid = document.createElement("div");
+		mid.className ="midNode node";
+		mid.setAttribute("node","mid");
+		mid.setAttribute("group",curves.length);
+		dragElement(mid);
+		styleListen(mid);
+		document.body.appendChild(mid);
+		
+		if(lastClickedEnd==null){
+			var end1 = document.createElement("div");
+			end1.className ="endNode node";
+			end1.setAttribute("node","end");
+			end1.setAttribute("group",curves.length);
+			dragElement(end1);
+			styleListen(end1);
+			document.body.appendChild(end1);
+			curves.push([end1,mid,end2]);
+		}
+		else{
+			curves.push([lastClickedEnd,mid,end2]);
+		}
+		
+	}
+</script>
